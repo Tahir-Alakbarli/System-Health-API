@@ -1,0 +1,8 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.pyc
+.venv
+README.md
+test_app.py
