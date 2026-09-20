@@ -1,0 +1,64 @@
+name: Continuous Deployment
+
+on:
+  workflow_run:
+    workflows:
+      - Continuous Integration
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: Production
+  cancel-in-progress: false
+
+jobs:
+  deploy_to_ec2:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - deployment
+    environment: Production
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+    steps:
+      - name: Check Out Successful Commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Build Deployment Image
+        run: docker build -t system-health-api:${DEPLOY_SHA} .
+
+      - name: Replace Application Container
+        run: |
+          docker rm -f System-Health-Container || true
+          docker run -d --name System-Health-Container --restart unless-stopped -p 8000:8000 -e APP_VERSION=${DEPLOY_SHA} system-health-api:${DEPLOY_SHA}
+
+      - name: Verify Deployment
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              docker logs System-Health-Container
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --fail http://127.0.0.1:8000/
+          curl --fail http://127.0.0.1:8000/health
+          curl --fail http://127.0.0.1:8000/system
+          curl --fail http://127.0.0.1:8000/version
+
+      - name: Remove Unused Images
+        run: docker image prune -f

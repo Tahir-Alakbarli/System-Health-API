@@ -1,0 +1,55 @@
+name: Continuous Integration
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test_and_build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Tests
+        run: pytest -v
+
+      - name: Build Docker Image
+        run: docker build -t system-health-api:${{ github.sha }} .
+
+      - name: Start Test Container
+        run: docker run -d --name System-Health-Container -p 8000:8000 -e APP_VERSION=${{ github.sha }} system-health-api:${{ github.sha }}
+
+      - name: Verify Container
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              docker logs System-Health-Container
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --fail http://127.0.0.1:8000/
+          curl --fail http://127.0.0.1:8000/health
+          curl --fail http://127.0.0.1:8000/system
+          curl --fail http://127.0.0.1:8000/version
+
+      - name: Remove Test Container
+        if: always()
+        run: docker rm -f System-Health-Container || true
