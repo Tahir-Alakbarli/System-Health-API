@@ -27,18 +27,13 @@ The project demonstrates that I can:
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    A["Push to main"] --> B["CI: tests and Docker build"]
-    B --> C["workflow_run after CI success"]
-    C --> D["EC2 self-hosted runner"]
-    D --> E["Gunicorn container on port 8000"]
-```
+I designed the project around two separate GitHub Actions workflows.
 
-I separated the pipeline into two workflows:
+When I pushed code to the `main` branch, the Continuous Integration workflow ran on a GitHub-hosted runner. It installed the required dependencies, executed the automated tests, and verified that the Docker image could be built successfully.
 
-1. **Continuous Integration** runs tests and verifies that the Docker image can be built.
-2. **Continuous Deployment** starts only after the CI workflow completes successfully and deploys the tested commit through the EC2 self-hosted runner.
+After CI completed successfully, GitHub triggered the Continuous Deployment workflow using the `workflow_run` event. The deployment job was assigned to my self-hosted runner on the EC2 instance using the `Deployment` label.
+
+The self-hosted runner built a Docker image for the tested commit, replaced the previous application container, started the new container on port `8000`, and verified that it became healthy. Gunicorn served the Flask application from inside the container.
 
 ## API Endpoints
 
