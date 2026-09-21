@@ -5,4 +5,6 @@ __pycache__
 *.pyc
 .venv
 README.md
-test_app.py
+Tests/
+
+Screenshots/
